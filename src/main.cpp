@@ -70,9 +70,8 @@ int main() {
 
   // MPC is initialized here!
   MPC mpc;
-  Eigen::Vector4d state;
 
-  h.onMessage([&mpc, &state](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -88,6 +87,8 @@ int main() {
           // j[1] is the data JSON object
           std::vector<double> ptsx = j[1]["ptsx"];
           std::vector<double> ptsy = j[1]["ptsy"];
+
+          Eigen::Vector4d state;
           state[0] = j[1]["x"];
           state[1] = j[1]["y"];
           state[2] = j[1]["psi"];
