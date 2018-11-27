@@ -9,6 +9,8 @@
 #include "Eigen/QR"
 #include "MPC.h"
 
+#define TARGET_TRAJ_NUM_POINTS 20
+
 // for convenience
 using json = nlohmann::json;
 
@@ -77,40 +79,68 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     std::string sdata = std::string(data).substr(0, length);
-    std::cout << sdata << std::endl;
+    //std::cout << sdata << std::endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       std::string s = hasData(sdata);
       if (s != "") {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
-          // j[1] is the data JSON object
-          std::vector<double> ptsx = j[1]["ptsx"];
-          std::vector<double> ptsy = j[1]["ptsy"];
-
-          Eigen::Vector4d state;
+          Eigen::VectorXd state(6);
           state[0] = j[1]["x"];
           state[1] = j[1]["y"];
           state[2] = j[1]["psi"];
           state[3] = j[1]["speed"];
+          //double delta= j[1]["steering_angle"];
+          //double a = j[1]["throttle"];
+
+          // j[1] is the data JSON object
+          std::vector<double> ptsx = j[1]["ptsx"];
+          std::vector<double> ptsy = j[1]["ptsy"];
+
+          uint n_waypoints = ptsx.size();
+          auto ptsx_transformed = Eigen::VectorXd(n_waypoints);
+          auto ptsy_transformed = Eigen::VectorXd(n_waypoints);
+          for (uint i = 0; i < n_waypoints; i++ ) {
+            double dX = ptsx[i] - state[0];
+            double dY = ptsy[i] - state[1];
+            double minus_psi = -state[2];
+            ptsx_transformed( i ) = dX * std::cos(minus_psi) - dY * std::sin(minus_psi);
+            ptsy_transformed( i ) = dX * std::sin(minus_psi) + dY * std::cos(minus_psi);
+          }
+
+          //Eigen::VectorXd vec_ptsx = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
+          //Eigen::VectorXd vec_ptsy = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
+          // TODO: Modify polynom order?
+          Eigen::VectorXd coeffs = polyfit(ptsx_transformed, ptsy_transformed, 1);
+
+          // TODO: Is this correct?
+          state[4] = polyeval(coeffs, state[0]) - state[1];
+          state[5] = state[2] - std::atan(coeffs[1]);
           
-          Eigen::VectorXd vec_ptsx = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
-          Eigen::VectorXd vec_ptsy = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
-          Eigen::VectorXd poly = polyfit(vec_ptsx, vec_ptsy, 3);
-          
-          std::vector<double> solution = mpc.Solve(state, poly);
-          double steer_value = solution[0];
+          std::vector<double> solution = mpc.Solve(state, coeffs);
+
+          double steer_value =  solution[0];
           double throttle_value = solution[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
+          // TODO: Create constant
+          msgJson["steering_angle"] = steer_value / deg2rad(25);
           msgJson["throttle"] = throttle_value;
 
           //Display the MPC predicted trajectory 
           std::vector<double> mpc_x_vals;
           std::vector<double> mpc_y_vals;
+
+          for (uint i = 2; i < solution.size(); i++) {
+            if (i % 2 == 0) {
+              mpc_x_vals.push_back(solution[i]);
+            } else {
+              mpc_y_vals.push_back(solution[i]);
+            }
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -122,6 +152,13 @@ int main() {
           std::vector<double> next_x_vals;
           std::vector<double> next_y_vals;
 
+          for (uint i = 0; i < TARGET_TRAJ_NUM_POINTS; i++) {
+            // TODO: Multiply i by factor to stretch x?
+            double x = i;
+            next_x_vals.push_back(x);
+            next_y_vals.push_back(polyeval(coeffs, x));
+          }
+
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
@@ -130,7 +167,8 @@ int main() {
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
+
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
