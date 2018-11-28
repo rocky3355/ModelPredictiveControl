@@ -18,7 +18,7 @@ const uint epsi_start = 5 * N;
 const uint delta_start = 6 * N;
 const uint a_start = 7 * N - 1;
 // TODO: Modify
-const double ref_v = 10.0;
+const double ref_v = 100.0;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -73,26 +73,26 @@ class FG_eval {
     fg[cte_start + 1] = vars[cte_start];
     fg[epsi_start + 1] = vars[epsi_start];
 
-    for (uint t = 1; t < N; t++) {
+    for (uint i = 1; i < N; i++) {
       // The state at time t+1 .
-      AD<double> x1 = vars[x_start + t];
-      AD<double> y1 = vars[y_start + t];
-      AD<double> psi1 = vars[psi_start + t];
-      AD<double> v1 = vars[v_start + t];
-      AD<double> cte1 = vars[cte_start + t];
-      AD<double> epsi1 = vars[epsi_start + t];
+      AD<double> x1 = vars[x_start + i];
+      AD<double> y1 = vars[y_start + i];
+      AD<double> psi1 = vars[psi_start + i];
+      AD<double> v1 = vars[v_start + i];
+      AD<double> cte1 = vars[cte_start + i];
+      AD<double> epsi1 = vars[epsi_start + i];
 
       // The state at time t.
-      AD<double> x0 = vars[x_start + t - 1];
-      AD<double> y0 = vars[y_start + t - 1];
-      AD<double> psi0 = vars[psi_start + t - 1];
-      AD<double> v0 = vars[v_start + t - 1];
-      AD<double> cte0 = vars[cte_start + t - 1];
-      AD<double> epsi0 = vars[epsi_start + t - 1];
+      AD<double> x0 = vars[x_start + i - 1];
+      AD<double> y0 = vars[y_start + i - 1];
+      AD<double> psi0 = vars[psi_start + i - 1];
+      AD<double> v0 = vars[v_start + i - 1];
+      AD<double> cte0 = vars[cte_start + i - 1];
+      AD<double> epsi0 = vars[epsi_start + i - 1];
 
       // Only consider the actuation at time t.
-      AD<double> delta0 = vars[delta_start + t - 1];
-      AD<double> a0 = vars[a_start + t - 1];
+      AD<double> delta0 = vars[delta_start + i - 1];
+      AD<double> a0 = vars[a_start + i - 1];
 
       AD<double> f0 = coeffs[0] + coeffs[1] * x0;
       AD<double> psides0 = CppAD::atan(coeffs[1]);
@@ -107,12 +107,14 @@ class FG_eval {
       // v_[t] = v[t-1] + a[t-1] * dt
       // cte[t] = f(x[t-1]) - y[t-1] + v[t-1] * sin(epsi[t-1]) * dt
       // epsi[t] = psi[t] - psides[t-1] + v[t-1] * delta[t-1] / Lf * dt
-      fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
-      fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      fg[1 + psi_start + t] = psi1 - (psi0 + v0 * delta0 / Lf * dt);
-      fg[1 + v_start + t] = v1 - (v0 + a0 * dt);
-      fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
-      fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
+
+      // TODO: Minus or plus??
+      fg[x_start + i + 1] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+      fg[y_start + i + 1] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+      fg[psi_start + i + 1] = psi1 - (psi0 + v0 * delta0 / Lf * dt);
+      fg[v_start + i] + 1 = v1 - (v0 + a0 * dt);
+      fg[cte_start + i + 1] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
+      fg[epsi_start + i + 1] = epsi1 - ((psi0 - psides0) + v0 * delta0 / Lf * dt);
     }
   }
 };
@@ -131,8 +133,6 @@ std::vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double cte = state[4];
   double epsi = state[5];
 
-  bool ok = true;
-  //size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   // TODO: Set the number of model variables (includes both states and inputs).
@@ -236,7 +236,7 @@ std::vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
       constraints_upperbound, fg_eval, solution);
 
   // Check some of the solution values
-  ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
+  bool success = (solution.status == CppAD::ipopt::solve_result<Dvector>::success);
 
   // Cost
   auto cost = solution.obj_value;

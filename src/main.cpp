@@ -99,14 +99,14 @@ int main() {
           std::vector<double> ptsy = j[1]["ptsy"];
 
           uint n_waypoints = ptsx.size();
-          auto ptsx_transformed = Eigen::VectorXd(n_waypoints);
-          auto ptsy_transformed = Eigen::VectorXd(n_waypoints);
+          Eigen::VectorXd ptsx_transformed = Eigen::VectorXd(n_waypoints);
+          Eigen::VectorXd ptsy_transformed = Eigen::VectorXd(n_waypoints);
           for (uint i = 0; i < n_waypoints; i++ ) {
             double dX = ptsx[i] - state[0];
             double dY = ptsy[i] - state[1];
             double minus_psi = -state[2];
-            ptsx_transformed( i ) = dX * std::cos(minus_psi) - dY * std::sin(minus_psi);
-            ptsy_transformed( i ) = dX * std::sin(minus_psi) + dY * std::cos(minus_psi);
+            ptsx_transformed(i) = dX * std::cos(minus_psi) - dY * std::sin(minus_psi);
+            ptsy_transformed(i) = dX * std::sin(minus_psi) + dY * std::cos(minus_psi);
           }
 
           //Eigen::VectorXd vec_ptsx = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
@@ -120,7 +120,7 @@ int main() {
           
           std::vector<double> solution = mpc.Solve(state, coeffs);
 
-          double steer_value =  solution[0];
+          double steer_value = solution[0];
           double throttle_value = solution[1];
 
           json msgJson;
