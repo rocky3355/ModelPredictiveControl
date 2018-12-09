@@ -9,15 +9,12 @@
 #include "Eigen/QR"
 #include "MPC.h"
 
-#define TARGET_TRAJ_NUM_POINTS 20
+#define TARGET_TRAJ_NUM_POINTS 30
+#define TARGET_TRAJ_POINTS_STRETCH 2.0
+#define MAX_STEER_ANGLE_RAD 0.436
 
 // for convenience
 using json = nlohmann::json;
-
-// For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
-double deg2rad(double x) { return x * pi() / 180; }
-double rad2deg(double x) { return x * 180 / pi(); }
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in std::string format will be returned,
@@ -86,85 +83,66 @@ int main() {
         auto j = json::parse(s);
         std::string event = j[0].get<std::string>();
         if (event == "telemetry") {
-          Eigen::VectorXd state(6);
-          state[0] = j[1]["x"];
-          state[1] = j[1]["y"];
-          state[2] = j[1]["psi"];
-          state[3] = j[1]["speed"];
-          //double delta= j[1]["steering_angle"];
-          //double a = j[1]["throttle"];
-
-          // j[1] is the data JSON object
+          double px = j[1]["x"];
+          double py = j[1]["y"];
+          double psi = j[1]["psi"];
+          double v = j[1]["speed"];
           std::vector<double> ptsx = j[1]["ptsx"];
           std::vector<double> ptsy = j[1]["ptsy"];
 
-          uint n_waypoints = ptsx.size();
-          Eigen::VectorXd ptsx_transformed = Eigen::VectorXd(n_waypoints);
-          Eigen::VectorXd ptsy_transformed = Eigen::VectorXd(n_waypoints);
-          for (uint i = 0; i < n_waypoints; i++ ) {
-            double dX = ptsx[i] - state[0];
-            double dY = ptsy[i] - state[1];
-            double minus_psi = -state[2];
-            ptsx_transformed(i) = dX * std::cos(minus_psi) - dY * std::sin(minus_psi);
-            ptsy_transformed(i) = dX * std::sin(minus_psi) + dY * std::cos(minus_psi);
+          Eigen::VectorXd ptsx_car_frame(ptsx.size());
+          Eigen::VectorXd ptsy_car_frame(ptsx.size());
+
+          // Transform points to car coordinate system
+          for (uint i = 0; i < ptsx.size(); i++) {
+            double delta_x = ptsx[i] - px;
+            double delta_y = ptsy[i] - py;
+            double sin_phi = std::sin(-psi);
+            double cos_phi = std::cos(-psi);
+            ptsx_car_frame[i] = delta_x * cos_phi - delta_y * sin_phi;
+            ptsy_car_frame[i] = delta_x * sin_phi + delta_y * cos_phi;
           }
 
-          //Eigen::VectorXd vec_ptsx = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsx.data(), ptsx.size());
-          //Eigen::VectorXd vec_ptsy = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(ptsy.data(), ptsy.size());
-          // TODO: Modify polynom order?
-          Eigen::VectorXd coeffs = polyfit(ptsx_transformed, ptsy_transformed, 1);
+          Eigen::VectorXd coeffs = polyfit(ptsx_car_frame, ptsy_car_frame, 3);
+          double cte = polyeval(coeffs, 0);
+          double epsi = -std::atan(coeffs[1]);
 
-          // TODO: Is this correct?
-          state[4] = polyeval(coeffs, state[0]) - state[1];
-          state[5] = state[2] - std::atan(coeffs[1]);
-          
-          std::vector<double> solution = mpc.Solve(state, coeffs);
-
-          double steer_value = solution[0];
-          double throttle_value = solution[1];
+          Eigen::VectorXd state(6);
+          state << 0, 0, 0, v, cte, epsi;
+          auto vars = mpc.Solve(state, coeffs);
+          double steer_value = vars[0];
+          double throttle_value = vars[1];
 
           json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          // TODO: Create constant
-          msgJson["steering_angle"] = steer_value / deg2rad(25);
+          msgJson["steering_angle"] = steer_value / 0.436;
           msgJson["throttle"] = throttle_value;
 
-          //Display the MPC predicted trajectory 
           std::vector<double> mpc_x_vals;
           std::vector<double> mpc_y_vals;
 
-          for (uint i = 2; i < solution.size(); i++) {
+          for (int i = 2; i < vars.size(); i ++) {
             if (i % 2 == 0) {
-              mpc_x_vals.push_back(solution[i]);
-            } else {
-              mpc_y_vals.push_back(solution[i]);
+              mpc_x_vals.push_back(vars[i]);
+            }
+            else {
+              mpc_y_vals.push_back(vars[i]);
             }
           }
-
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Green line
 
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
-          //Display the waypoints/reference line
           std::vector<double> next_x_vals;
           std::vector<double> next_y_vals;
 
-          for (uint i = 0; i < TARGET_TRAJ_NUM_POINTS; i++) {
-            // TODO: Multiply i by factor to stretch x?
-            double x = i;
+          for (double i = 0; i < TARGET_TRAJ_NUM_POINTS; i += 3) {
+            double x = TARGET_TRAJ_POINTS_STRETCH * i;
             next_x_vals.push_back(x);
             next_y_vals.push_back(polyeval(coeffs, x));
           }
 
-          //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
-          // the points in the simulator are connected by a Yellow line
-
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
-
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           //std::cout << msg << std::endl;
