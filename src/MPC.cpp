@@ -30,7 +30,7 @@ const double Lf = 2.67;
 
 const double ref_cte = 0;
 const double ref_epsi = 0;
-const double ref_v = 100.0;
+const double ref_v = 60.0;
 
 uint x_start = 0;
 uint y_start = x_start + N;
