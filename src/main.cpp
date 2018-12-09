@@ -120,7 +120,7 @@ int main() {
           std::vector<double> mpc_x_vals;
           std::vector<double> mpc_y_vals;
 
-          for (int i = 2; i < vars.size(); i ++) {
+          for (uint i = 2; i < vars.size(); i ++) {
             if (i % 2 == 0) {
               mpc_x_vals.push_back(vars[i]);
             }
@@ -135,7 +135,7 @@ int main() {
           std::vector<double> next_x_vals;
           std::vector<double> next_y_vals;
 
-          for (double i = 0; i < TARGET_TRAJ_NUM_POINTS; i += 3) {
+          for (uint i = 0; i < TARGET_TRAJ_NUM_POINTS; i += 3) {
             double x = TARGET_TRAJ_POINTS_STRETCH * i;
             next_x_vals.push_back(x);
             next_y_vals.push_back(polyeval(coeffs, x));

@@ -30,7 +30,7 @@ const double Lf = 2.67;
 
 const double ref_cte = 0;
 const double ref_epsi = 0;
-const double ref_v = 70;
+const double ref_v = 100.0;
 
 uint x_start = 0;
 uint y_start = x_start + N;
@@ -105,7 +105,7 @@ class FG_eval {
 
       fg[1 + x_start + t] = x1 - (x0 + v0 * CppAD::cos(psi0) * DT);
       fg[1 + y_start + t] = y1 - (y0 + v0 * CppAD::sin(psi0) * DT);
-      fg[1 + psi_start + t] = psi1 - (psi0 - v0/Lf * delta * DT);
+      fg[1 + psi_start + t] = psi1 - (psi0 - v0 / Lf * delta * DT);
       fg[1 + v_start + t] = v1 - (v0 + a * DT);
       fg[1 + cte_start + t] = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * DT));
       fg[1 + epsi_start + t] = epsi1 - ((psi0 - psides0) - v0 / Lf * delta * DT);
